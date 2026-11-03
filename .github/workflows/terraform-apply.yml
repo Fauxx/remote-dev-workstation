@@ -1,0 +1,87 @@
+name: "Terraform Main Apply"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-apply.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: tf-apply-main
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: "Terraform Apply (Sequential Deployment)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      TF_IN_AUTOMATION: "true"
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_STATE_BUCKET: ${{ vars.GCP_STATE_BUCKET }}
+      TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+      TF_VAR_remote_state_bucket: ${{ vars.GCP_STATE_BUCKET }}
+
+    steps:
+      - name: "Checkout Source Code"
+        uses: actions/checkout@v4
+
+      - name: "Setup Terraform"
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: "Authenticate to Google Cloud via WIF"
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: "Layer 1: Apply 00-Bootstrap Infrastructure"
+        id: apply-bootstrap
+        run: |
+          cd terraform/00-bootstrap
+          echo "Initializing 00-bootstrap..."
+          if [ -n "${{ vars.GCP_STATE_BUCKET }}" ]; then
+            terraform init -input=false -backend-config="bucket=${{ vars.GCP_STATE_BUCKET }}" || terraform init -input=false
+          else
+            terraform init -input=false
+          fi
+
+          echo "Applying 00-bootstrap..."
+          terraform apply -auto-approve -input=false
+
+      - name: "Layer 2: Apply 01-Workstation Infrastructure"
+        id: apply-workstation
+        run: |
+          cd terraform/01-workstation
+          echo "Initializing 01-workstation..."
+          if [ -n "${{ vars.GCP_STATE_BUCKET }}" ]; then
+            terraform init -input=false -backend-config="bucket=${{ vars.GCP_STATE_BUCKET }}"
+          else
+            terraform init -input=false
+          fi
+
+          echo "Applying 01-workstation..."
+          terraform apply -auto-approve -input=false -var="remote_state_bucket=${{ vars.GCP_STATE_BUCKET }}" -var="project_id=${{ vars.GCP_PROJECT_ID }}"
+
+      - name: "Post-Apply Automated Verification"
+        id: verify
+        run: |
+          echo "Executing post-apply verification check..."
+          chmod +x scripts/verify-workstation.sh 2>/dev/null || true
+          if [ -f "scripts/verify-workstation.sh" ]; then
+            ./scripts/verify-workstation.sh
+          elif [ -f "scripts/verify_m2_workstation.sh" ]; then
+            ./scripts/verify_m2_workstation.sh
+          else
+            echo "scripts/verify-workstation.sh will run when workstation VM is live"
+          fi

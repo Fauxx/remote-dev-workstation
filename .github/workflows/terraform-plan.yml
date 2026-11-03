@@ -1,0 +1,149 @@
+name: "Terraform PR Plan"
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-plan.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+concurrency:
+  group: tf-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: "Terraform Plan"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      TF_IN_AUTOMATION: "true"
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_STATE_BUCKET: ${{ vars.GCP_STATE_BUCKET }}
+      TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+      TF_VAR_remote_state_bucket: ${{ vars.GCP_STATE_BUCKET }}
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: Authenticate to Google Cloud via WIF
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Terraform Format Check
+        id: fmt
+        run: |
+          echo "Running terraform fmt check..."
+          terraform fmt -check -diff -recursive terraform/
+
+      - name: Validate & Plan 00-Bootstrap Layer
+        id: plan-bootstrap
+        run: |
+          cd terraform/00-bootstrap
+          echo "### 00-bootstrap: Initializing..."
+          if [ -n "${{ vars.GCP_STATE_BUCKET }}" ]; then
+            terraform init -input=false -backend-config="bucket=${{ vars.GCP_STATE_BUCKET }}" || terraform init -input=false
+          else
+            terraform init -input=false
+          fi
+
+          echo "### 00-bootstrap: Validating..."
+          terraform validate
+
+          echo "### 00-bootstrap: Planning..."
+          terraform plan -no-color -input=false -detailed-exitcode 2>&1 | tee /tmp/plan_bootstrap.txt || EXIT_CODE=$?
+          if [ "${EXIT_CODE:-0}" -eq 1 ]; then
+            echo "terraform plan failed for 00-bootstrap"
+            exit 1
+          fi
+
+      - name: Validate & Plan 01-Workstation Layer
+        id: plan-workstation
+        run: |
+          cd terraform/01-workstation
+          echo "### 01-workstation: Initializing..."
+          if [ -n "${{ vars.GCP_STATE_BUCKET }}" ]; then
+            terraform init -input=false -backend-config="bucket=${{ vars.GCP_STATE_BUCKET }}"
+          else
+            terraform init -input=false
+          fi
+
+          echo "### 01-workstation: Validating..."
+          terraform validate
+
+          echo "### 01-workstation: Planning..."
+          terraform plan -no-color -input=false -var="remote_state_bucket=${{ vars.GCP_STATE_BUCKET }}" -var="project_id=${{ vars.GCP_PROJECT_ID }}" -detailed-exitcode 2>&1 | tee /tmp/plan_workstation.txt || EXIT_CODE=$?
+          if [ "${EXIT_CODE:-0}" -eq 1 ]; then
+            echo "terraform plan failed for 01-workstation"
+            exit 1
+          fi
+
+      - name: Generate Sticky PR Plan Comment
+        if: always() && github.event_name == 'pull_request'
+        run: |
+          cat << 'EOF' > /tmp/comment.md
+          ## 🪐 Terraform Plan Status
+
+          | Step | Status |
+          | :--- | :--- |
+          | Format Check | ${{ steps.fmt.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |
+          | 00-Bootstrap | ${{ steps.plan-bootstrap.outcome == 'success' && '✅ Planned' || '❌ Failed' }} |
+          | 01-Workstation | ${{ steps.plan-workstation.outcome == 'success' && '✅ Planned' || '❌ Failed' }} |
+
+          <details>
+          <summary><b>00-Bootstrap Plan Output</b> (Click to expand)</summary>
+
+          ```hcl
+          EOF
+
+          if [ -f /tmp/plan_bootstrap.txt ]; then
+            head -c 25000 /tmp/plan_bootstrap.txt >> /tmp/comment.md
+          else
+            echo "No plan output recorded." >> /tmp/comment.md
+          fi
+
+          cat << 'EOF' >> /tmp/comment.md
+          ```
+          </details>
+
+          <details>
+          <summary><b>01-Workstation Plan Output</b> (Click to expand)</summary>
+
+          ```hcl
+          EOF
+
+          if [ -f /tmp/plan_workstation.txt ]; then
+            head -c 25000 /tmp/plan_workstation.txt >> /tmp/comment.md
+          else
+            echo "No plan output recorded." >> /tmp/comment.md
+          fi
+
+          cat << 'EOF' >> /tmp/comment.md
+          ```
+          </details>
+
+          *Pushed by: @${{ github.actor }} | Commit: `${{ github.sha }}`*
+          EOF
+
+      - name: Post or Update Sticky PR Comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: always() && github.event_name == 'pull_request'
+        with:
+          header: terraform-plan
+          path: /tmp/comment.md
