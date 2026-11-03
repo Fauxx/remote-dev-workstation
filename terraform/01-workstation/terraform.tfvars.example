@@ -1,0 +1,19 @@
+# Google Cloud Project ID (leave empty or omitted to ingest automatically from 00-bootstrap state)
+project_id = ""
+
+# Regional Placement
+region = "us-central1"
+zone   = "us-central1-a"
+
+# Machine Specifications
+machine_type      = "e2-medium"
+boot_disk_size_gb = 50
+boot_disk_type    = "pd-balanced"
+
+# Name of the GCS bucket storing the 00-bootstrap remote state
+# Exported by 00-bootstrap as 'state_bucket_name' (e.g. "rdw-tfstate-1a2b3c4d")
+remote_state_bucket = "rdw-tfstate-REPLACE_ME"
+
+# Networking Configuration
+instance_name = "mobile-workstation"
+subnet_cidr   = "10.0.1.0/24"
