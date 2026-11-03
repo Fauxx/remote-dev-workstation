@@ -135,7 +135,7 @@ setup_base_packages
 get_secret() {
     local secret_id="$1"
     local TOKEN
-    TOKEN=$(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" 2>/dev/null | jq -r .access_token)
+    TOKEN=$(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" 2>/dev/null | jq -r .access_token || true)
     local PROJECT_ID
     PROJECT_ID=$(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/project-id" 2>/dev/null || true)
 
@@ -168,7 +168,7 @@ setup_tailscale() {
 
     if [ -n "${TAILSCALE_KEY:-}" ]; then
         echo "Connecting workstation node to Tailnet..."
-        tailscale up --authkey="${TAILSCALE_KEY}" --ssh --hostname=cloud-workstation --accept-routes
+        tailscale up --authkey="${TAILSCALE_KEY}" --ssh --hostname=cloud-workstation --accept-routes || echo "WARNING: tailscale up failed (authkey expired or network issue). Proceeding with remaining bootstrap..."
     else
         echo "WARNING: No Tailscale authkey provided (tailscale-auth-key secret absent). Tailscale daemon active; run 'tailscale up --ssh' manually to join."
     fi
@@ -290,6 +290,14 @@ setup_toolchain
 setup_project_repo() {
     echo "--- Setting up Workspace & Cloning FireMonitoringSystem ---"
     mkdir -p "${WORKSPACE_DIR}"
+    chown -R "${TARGET_USER}:${TARGET_USER}" "${WORKSPACE_DIR}"
+    chmod 755 "${WORKSPACE_DIR}"
+
+    # Clean up incomplete clone if directory exists without valid .git
+    if [ -d "${REPO_DIR}" ] && [ ! -d "${REPO_DIR}"/.git ]; then
+        echo "Cleaning up incomplete repository clone at ${REPO_DIR}..."
+        rm -rf "${REPO_DIR}"
+    fi
 
     if [ -d "${REPO_DIR}"/.git ]; then
         echo "FireMonitoringSystem repository already exists at ${REPO_DIR}; pulling latest changes..."
