@@ -1,0 +1,17 @@
+# Default behavior: auto-normalize line endings
+* text=auto eol=lf
+
+# Infrastructure as Code
+*.tf text eol=lf
+*.tfvars text eol=lf
+*.hcl text eol=lf
+
+# Shell scripts (must retain LF for executable execution on Linux)
+*.sh text eol=lf
+
+# Configuration & Documentation
+*.md text
+*.json text
+*.yml text
+*.yaml text
+*.txt text

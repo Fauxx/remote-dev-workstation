@@ -1,0 +1,139 @@
+# ==============================================================================
+# Terraform & OpenTofu
+# ==============================================================================
+# Provider plugins and local cache
+**/.terraform/
+.terraform/
+
+# Terraform state files (CRITICAL: Never commit state containing plaintext data)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+*.tfstate.lock.info
+
+# Terraform variable definitions (environment-specific configurations)
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Terraform execution plan artifacts and crash logs
+*.tfplan
+*.tfplan.binary
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI local configuration overrides
+.terraformrc
+terraform.rc
+backend.conf.local
+
+# ==============================================================================
+# Google Cloud Platform & Credential Files
+# ==============================================================================
+# Service account keys, OAuth tokens, and Google Cloud credentials
+*.json.key
+*credentials*.json
+*service_account*.json
+*service-account*.json
+gcp-key*.json
+key.json
+keys/
+secrets/
+.gcloud/
+
+# ==============================================================================
+# Secrets, Environment & Tokens
+# ==============================================================================
+# Local environment variables and dot-env files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pkcs12
+*.p12
+*.crt
+*.pub
+id_rsa*
+id_ed25519*
+!*.md
+
+# Tailscale and sensitive auth tokens
+tailscale-key*
+*.token
+
+# ==============================================================================
+# Node.js & Web Tooling
+# ==============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+
+# ==============================================================================
+# Python Tooling
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.mypy_cache/
+tests/results/
+
+# ==============================================================================
+# Operating System & Editors
+# ==============================================================================
+# Linux / Unix
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+
+# IDEs & Editors
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
